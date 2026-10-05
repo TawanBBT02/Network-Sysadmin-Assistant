@@ -1,28 +1,46 @@
 question,expected_answer,has_answer_in_context
 "คำสั่งเพื่อเปลี่ยนจาก User EXEC mode เป็น Privileged EXEC mode คืออะไร?","คำสั่ง enable",True
 "วิธีตั้งชื่อ VLAN 10 เป็น SALES บน Cisco ต้องพิมพ์คำสั่งอะไร?","คำสั่ง name SALES",True
+"คำสั่งล้างค่า startup-config บนสวิตช์ Cisco คืออะไร?","คำสั่ง erase startup-config",True
+"หากต้องการดูตาราง MAC address บนสวิตช์ Cisco ต้องใช้คำสั่งอะไร?","คำสั่ง show mac address-table",True
 "การทำ Factory Reset ของสวิตช์ Aruba ด้วยปุ่มหน้าเครื่อง ต้องรอให้ไฟอะไรกะพริบก่อนปล่อยปุ่ม Clear?","ไฟ Test LED กะพริบ (ประมาณ 5 วินาที)",True
 "ผู้ดูแลระบบสามารถปิดฟังก์ชันปุ่ม Clear/Reset หน้าเครื่อง Aruba ได้ด้วยคำสั่งอะไร?","คำสั่ง no front-panel-security password-clear",True
+"ArubaOS-CX ใช้ Baud rate เท่าไหร่ในการเชื่อมต่อ Console?","ใช้ Baud rate 115200",True
+"ผู้ใช้เริ่มต้น (Default User) ของ ArubaOS-CX หลังจากการทำ Factory Reset คืออะไร?","ผู้ใช้คือ admin",True
 "ค่า Administrative Distance (AD) ของ OSPF คือเท่าไหร่?","ค่า AD คือ 110",True
 "ลำดับแรกในการเลือก Router ID ของ OSPF พิจารณาจากอะไร?","พิจารณาจากค่าที่กำหนดด้วยคำสั่ง router-id",True
+"OSPF ใช้ Multicast IP Address อะไรสำหรับ All OSPF Routers?","ใช้ IP 224.0.0.5",True
+"ค่า Reference Bandwidth ปกติของ OSPF คือเท่าไหร่?","100 Mbps",True
 "Keepalived ใช้โปรโตคอลอะไรในการสร้าง Virtual IP?","ใช้โปรโตคอล VRRP",True
 "ค่า virtual_router_id ในไฟล์ keepalived.conf ของ node MASTER และ BACKUP ต้องตั้งค่าอย่างไร?","ต้องตั้งค่าให้เหมือนกัน",True
+"คำสั่งที่ใช้ตรวจสอบว่า Virtual IP (VIP) อยู่ที่ interface ไหนใน Ubuntu คืออะไร?","ใช้คำสั่ง ip -br addr show หรือ ip addr show",True
 "Ubuntu มีโปรแกรมอะไรติดตั้งมาให้เป็นค่าเริ่มต้นสำหรับทำ Centralized Log Server?","โปรแกรม rsyslog",True
 "อุปกรณ์เครือข่าย Cisco ใช้คำสั่งอะไรเพื่อส่ง Syslog ไปที่ IP 192.168.1.10?","คำสั่ง logging host 192.168.1.10",True
+"rsyslog เปิดรับ log ผ่านเครือข่ายที่พอร์ตใดเป็นมาตรฐาน?","พอร์ต UDP และ TCP หมายเลข 514",True
 "คำสั่ง CLI ใดที่ใช้สำหรับลบ VM บน Proxmox และไม่สามารถย้อนกลับได้?","คำสั่ง qm destroy <vmid> --purge",True
-"การตั้งค่าเครือข่าย VLAN tag 20 สำหรับ VM บน Proxmox ต้องเพิ่มพารามิเตอร์ใด?","พารามิเตอร์ tag=20 (เช่น qm set <vmid> --net1 virtio,bridge=vmbr1,tag=20)",True
+"การตั้งค่าเครือข่าย VLAN tag 20 สำหรับ VM บน Proxmox ต้องเพิ่มพารามิเตอร์ใด?","เพิ่มพารามิเตอร์ tag=20 เช่น qm set <vmid> --net1 virtio,bridge=vmbr1,tag=20",True
+"คำสั่งปิด VM แบบสุภาพบน Proxmox ผ่าน ACPI/agent คือคำสั่งใด?","คำสั่ง qm shutdown",True
 "คำสั่งใดที่ต้องรันทุกครั้งหลังจากการนำเข้า Image ใน EVE-NG เพื่อแก้ไขสิทธิ์?","คำสั่ง /opt/unetlab/wrappers/unl_wrapper -a fixpermissions",True
 "รหัสผ่านเริ่มต้นสำหรับการเข้าถึง Web UI ของ EVE-NG ด้วยผู้ใช้ admin คืออะไร?","รหัสผ่านคือ eve",True
+"ดิสก์หลักแบบ VirtIO สำหรับ Image บน EVE-NG ต้องตั้งชื่อไฟล์ว่าอะไร?","ตั้งชื่อไฟล์ว่า virtioa.qcow2",True
 "นโยบายการออกแบบเครือข่ายอนุญาตให้มีกี่ Zone ที่เชื่อมต่อตรงกับ Static Zone?","อนุญาตให้มีเพียง 1 Zone เท่านั้น (Gateway Zone)",True
 "ตามนโยบาย หาก Zone C ต้องการสื่อสารกับ Static Zone ต้องทำอย่างไร?","ต้องสื่อสารผ่านทาง Gateway Zone เท่านั้น",True
-"โปรโตคอล IKE แลกเปลี่ยนข้อมูลผ่านพอร์ต UDP ใดเป็นมาตรฐาน?","พอร์ต UDP 500",True
-"หาก IPsec Tunnel ขึ้นแต่ ping ไม่ผ่าน หนึ่งในสาเหตุที่พบบ่อยคืออะไร?","อาจเกิดจากไม่ได้ยกเว้น NAT (NAT exemption) หรือ Route กลับไม่ถูกต้อง",True
-"สถานะ Incomplete ในตาราง ARP หมายถึงอะไร?","หมายถึงส่ง ARP request ไปแล้วแต่ไม่มีการตอบกลับ",True
+"ควรทบทวน ACL หรือ Firewall rule อย่างน้อยบ่อยแค่ไหน?","อย่างน้อยไตรมาสละครั้ง",True
+"โปรโตคอล IKE ของ IPsec แลกเปลี่ยนข้อมูลผ่านพอร์ต UDP ใดเป็นมาตรฐาน?","พอร์ต UDP 500",True
+"โปรโตคอล ESP ของ IPsec ใช้ IP protocol หมายเลขอะไร?","หมายเลข 50",True
+"หาก IPsec Tunnel ขึ้นแต่ ping ไม่ผ่าน หนึ่งในสาเหตุที่พบบ่อยคืออะไร?","ไม่ได้ยกเว้น NAT (NAT exemption) หรือ Route กลับไม่ถูกต้อง",True
+"ใน Phase 1 ของ IPsec ควรหลีกเลี่ยงการใช้ Hash algorithm ชนิดใด?","ควรหลีกเลี่ยง MD5 และ SHA-1",True
+"สถานะ Incomplete ในตาราง ARP หมายถึงอะไร?","ส่ง ARP request ไปแล้วแต่ไม่มีการตอบกลับ",True
 "คำสั่งใดบน Windows ที่ใช้ไม่แปลง IP เป็นชื่อโดเมนเมื่อทำ Traceroute เพื่อให้ทำงานเร็วขึ้น?","คำสั่ง tracert -d",True
+"หาก ping มีผลลัพธ์เป็น TTL expired in transit หมายความว่าอย่างไร?","เกิด routing loop หรือ TTL ต่ำเกินไป",True
+"ใน Linux ถ้าต้องการส่ง ping เพื่อทดสอบ MTU และห้าม fragment ต้องเพิ่มพารามิเตอร์ใด?","เพิ่มพารามิเตอร์ -M do",True
 "การตั้งค่า BGP Routing Protocol บน Cisco Switch มีขั้นตอนอย่างไร?","ไม่พบข้อมูล",False
 "คำสั่งรีเซ็ตรหัสผ่านผู้ดูแลระบบบน Windows Server 2022 คืออะไร?","ไม่พบข้อมูล",False
 "วิธีการสร้าง Docker Container บน Ubuntu มีขั้นตอนอย่างไร?","ไม่พบข้อมูล",False
 "อุปกรณ์ Palo Alto Firewall ใช้คำสั่งใดในการทำ Factory Reset?","ไม่พบข้อมูล",False
 "การติดตั้ง NGINX Ingress Controller บน Kubernetes ต้องรันคำสั่งใด?","ไม่พบข้อมูล",False
+"วิธีการรีเซ็ตค่า BGP neighbor บน Juniper Router ทำอย่างไร?","ไม่พบข้อมูล",False
+"ขั้นตอนการอัปเกรด Firmware ของ F5 BIG-IP Load Balancer มีอะไรบ้าง?","ไม่พบข้อมูล",False
+"โปรโตคอล STP (Spanning Tree Protocol) ใช้เวลาในการ Converge กี่วินาทีตามมาตรฐาน 802.1D?","ไม่พบข้อมูล",False
+"การติดตั้ง Zabbix Server บน CentOS 8 ใช้คำสั่งอะไร?","ไม่พบข้อมูล",False
 "สาย Fiber Optic แบบ Single Mode สามารถส่งข้อมูลได้ไกลสูงสุดกี่กิโลเมตร?","ไม่พบข้อมูล",False
-"วิธีการเปลี่ยนรหัสผ่าน Wi-Fi บนเราเตอร์ของผู้ให้บริการอินเทอร์เน็ตทำอย่างไร?","ไม่พบข้อมูล",False
