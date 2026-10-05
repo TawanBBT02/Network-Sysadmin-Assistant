@@ -1,0 +1,147 @@
+============================================================
+คู่มือแก้ปัญหา Aruba Switch: Factory Reset และกู้คืนรหัสผ่าน
+============================================================
+
+คำเตือนสำคัญ
+------------------------------------------------------------
+- Factory Reset จะลบ configuration ทั้งหมด (รวมถึง IP, VLAN, user, key)
+- ให้สำรอง config ก่อนทุกครั้งถ้ายังเข้าอุปกรณ์ได้
+- ควรทำเมื่อได้รับอนุญาตและเป็นอุปกรณ์ที่อยู่ในความดูแลของคุณเท่านั้น
+- ขั้นตอนทางกายภาพ (ปุ่ม/Boot menu) แตกต่างกันตามรุ่นและเวอร์ชัน
+  ควรตรวจสอบ Installation Guide ของรุ่นนั้นอีกครั้งก่อนลงมือ
+
+1. แยกให้ออกก่อนว่าเป็น OS ตระกูลไหน
+------------------------------------------------------------
+Aruba switch มี 2 ตระกูลหลักที่คำสั่งต่างกัน
+
+  ก) ArubaOS-Switch (เดิมคือ HP ProCurve) เช่น 2530, 2540, 2930F/M, 3810
+     - prompt เช่น  "Aruba-2930F#"
+  ข) ArubaOS-CX เช่น 6000, 6100, 6200, 6300, 8xxx
+     - prompt เช่น  "switch#"
+
+ตรวจสอบรุ่น:
+  show version
+  show system        (ArubaOS-Switch)
+  show system        (ArubaOS-CX ใช้ได้เช่นกัน)
+
+2. การเชื่อมต่อผ่าน Console
+------------------------------------------------------------
+ใช้สาย Console (RJ-45 to USB หรือ USB-C ตามรุ่น) แล้วเปิดโปรแกรม
+เช่น PuTTY / Tera Term / minicom ด้วยค่า:
+
+  Baud rate : 9600 (ArubaOS-Switch)  /  115200 (ArubaOS-CX)
+  Data bits : 8
+  Parity    : None
+  Stop bits : 1
+  Flow ctrl : None
+
+Linux:
+  sudo minicom -D /dev/ttyUSB0 -b 115200
+
+3. Factory Reset: ArubaOS-Switch (ProCurve)
+------------------------------------------------------------
+3.1 วิธีใช้คำสั่ง CLI (ถ้ายังเข้าอุปกรณ์ได้)
+  Aruba# erase startup-config
+  Aruba# reload
+
+  หรือบางรุ่น/เวอร์ชัน:
+  Aruba(config)# erase all        ! ลบ config พร้อมลบข้อมูลที่เกี่ยวข้อง
+
+3.2 วิธีใช้ปุ่มบนตัวเครื่อง (ถ้าไม่ทราบรหัสผ่าน)
+สวิตช์ส่วนใหญ่มีปุ่มเล็ก ๆ ชื่อ "Reset" และ "Clear" ที่แผงด้านหน้า
+
+  ขั้นตอน Factory Reset:
+  1. กดปุ่ม Reset และ Clear ค้างไว้พร้อมกัน
+  2. ปล่อยปุ่ม Reset ขณะที่ยังกด Clear ค้างอยู่
+  3. รอจนไฟ Test LED เริ่มกะพริบ (ประมาณ 5 วินาที) แล้วปล่อยปุ่ม Clear
+  4. สวิตช์จะรีบูตและกลับเป็นค่า default จากโรงงาน
+
+3.3 ล้างเฉพาะรหัสผ่าน (Clear Password)
+  - กดปุ่ม Clear ค้างไว้ประมาณ 1 วินาที จะล้าง password ของ
+    Manager/Operator แต่ไม่ลบ config อื่น
+  - หลังเข้าได้แล้วให้ตั้งรหัสใหม่:
+      Aruba# configure
+      Aruba(config)# password manager
+      New password for manager: ********
+      Aruba(config)# write memory
+
+  หมายเหตุ: ผู้ดูแลระบบสามารถปิดฟังก์ชันปุ่ม Clear/Reset เพื่อความปลอดภัยได้
+  ด้วยคำสั่ง
+      Aruba(config)# no front-panel-security password-clear
+      Aruba(config)# front-panel-security factory-reset      (ตรวจสอบรูปแบบตามรุ่น)
+  ถ้าถูกปิดไว้ วิธีปุ่มอาจใช้ไม่ได้ ต้องติดต่อ Aruba Support
+
+4. Factory Reset: ArubaOS-CX
+------------------------------------------------------------
+4.1 ผ่าน CLI (ต้องเข้า admin ได้)
+  switch# erase all zeroize
+  ! คำสั่งนี้ลบ config และข้อมูลทั้งหมด จากนั้นอุปกรณ์จะรีบูต
+
+  หรือเพียงล้าง startup config:
+  switch# erase startup-config
+  switch# boot system
+
+4.2 การตรวจสอบหลังรีบูต
+  - Login ครั้งแรก: user "admin" และไม่มีรหัสผ่าน
+  - ระบบจะบังคับให้ตั้งรหัสผ่านใหม่
+  switch# show running-config
+  switch# show interface brief
+
+5. กู้คืนรหัสผ่าน ArubaOS-CX (กรณีลืม admin)
+------------------------------------------------------------
+ArubaOS-CX รุ่นจริงใช้ขั้นตอนผ่าน ServiceOS ผ่านทาง Console
+(ต้องต่อ Console ตลอดและมีสิทธิ์เข้าถึงตัวเครื่องทางกายภาพ)
+
+  1. ต่อสาย Console และรีบูตสวิตช์ (ดึงไฟแล้วเสียบใหม่)
+  2. เมื่อเห็นข้อความ boot ให้กดปุ่มที่ระบบแจ้ง
+     (เช่น Ctrl+C หรือตามหน้าจอ) เพื่อเข้า ServiceOS menu
+  3. เลือกตัวเลือกด้าน Password/Factory Reset ตามเมนูที่แสดง
+  4. รีบูตและเข้าด้วย user "admin" แล้วตั้งรหัสผ่านใหม่
+
+  ข้อสังเกต: บางเวอร์ชันการกู้รหัสผ่านจะ "ลบ config" ด้วยเพื่อความปลอดภัย
+  ดังนั้นต้องมี backup config เก็บไว้ที่อื่นเสมอ
+
+6. การสำรองและกู้คืน config
+------------------------------------------------------------
+ArubaOS-Switch:
+  Aruba# copy running-config tftp 192.168.1.50 backup-sw01.cfg
+  Aruba# copy tftp running-config 192.168.1.50 backup-sw01.cfg
+
+ArubaOS-CX:
+  switch# copy running-config tftp://192.168.1.50/backup-sw01.cfg vrf default
+  switch# copy tftp://192.168.1.50/backup-sw01.cfg running-config vrf default
+
+7. ตั้งค่าเบื้องต้นหลัง Reset
+------------------------------------------------------------
+ArubaOS-Switch:
+  Aruba(config)# hostname SW-ARUBA-01
+  Aruba(config)# vlan 1
+  Aruba(vlan-1)# ip address 192.168.1.10 255.255.255.0
+  Aruba(vlan-1)# exit
+  Aruba(config)# ip default-gateway 192.168.1.1
+  Aruba(config)# password manager
+  Aruba(config)# ip ssh
+  Aruba(config)# write memory
+
+ArubaOS-CX:
+  switch(config)# hostname SW-CX-01
+  switch(config)# interface vlan 1
+  switch(config-if-vlan)# ip address 192.168.1.10/24
+  switch(config-if-vlan)# exit
+  switch(config)# ip route 0.0.0.0/0 192.168.1.1
+  switch(config)# ssh server vrf default
+  switch# write memory
+
+8. Troubleshooting ที่พบบ่อย
+------------------------------------------------------------
+  อาการ: ต่อ Console แล้วไม่มีข้อความ
+    - ตรวจสอบ COM port ใน Device Manager และ baud rate
+    - ลองเปลี่ยนสาย/พอร์ต USB
+
+  อาการ: ปุ่ม Clear ไม่ทำงาน
+    - อาจถูกปิดด้วย front-panel-security
+    - ลองกดนานขึ้นและตรวจสอบ LED ตามคู่มือรุ่นนั้น
+
+  อาการ: ไม่สามารถ ping หลัง Reset
+    - ค่า default อาจเป็น DHCP ให้ตรวจ IP ด้วย "show ip" หรือ "show interface"
+    - ตรวจสอบสายและ VLAN ของพอร์ตที่เชื่อมต่อ

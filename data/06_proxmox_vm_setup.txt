@@ -1,0 +1,159 @@
+============================================================
+คู่มือสร้างและบริหารจัดการ Virtual Machine บน Proxmox VE
+============================================================
+
+1. ภาพรวม
+------------------------------------------------------------
+Proxmox VE (PVE) เป็นแพลตฟอร์ม virtualization แบบ open source
+ใช้ KVM สำหรับ VM และ LXC สำหรับ container
+จัดการผ่าน Web UI (https://<IP>:8006) หรือ CLI (qm, pct, pvesh)
+
+คำศัพท์ที่ควรรู้:
+  Node       : เครื่อง Proxmox แต่ละเครื่อง
+  VMID       : หมายเลขประจำ VM (ตั้งแต่ 100 ขึ้นไป)
+  Storage    : ที่เก็บข้อมูล เช่น local, local-lvm, nfs
+  Bridge     : สวิตช์เสมือน เช่น vmbr0
+  Template   : VM ต้นแบบสำหรับ clone
+
+2. อัปโหลดไฟล์ ISO
+------------------------------------------------------------
+ผ่าน Web UI:
+  Datacenter > Node > local (storage) > ISO Images > Upload
+
+ผ่าน CLI (ดาวน์โหลดตรงบน Proxmox):
+  cd /var/lib/vz/template/iso
+  wget https://releases.ubuntu.com/24.04/ubuntu-24.04-live-server-amd64.iso
+  ls -lh /var/lib/vz/template/iso
+
+3. สร้าง VM ผ่าน Web UI
+------------------------------------------------------------
+คลิก "Create VM" แล้วกรอกตามแท็บ:
+
+  General  : VM ID, Name
+  OS       : เลือก ISO image และ Guest OS type (Linux)
+  System   : BIOS = Default (SeaBIOS) หรือ OVMF (UEFI), เปิด Qemu Agent
+  Disks    : Bus = SCSI, Controller = VirtIO SCSI single, ขนาดดิสก์ เช่น 32 GiB
+  CPU      : Cores และ Type = host (ประสิทธิภาพดีสุด)
+  Memory   : เช่น 4096 MiB
+  Network  : Bridge = vmbr0, Model = VirtIO (paravirtualized)
+  Confirm  : ตรวจสอบแล้วกด Finish
+
+4. สร้าง VM ผ่าน CLI (qm)
+------------------------------------------------------------
+  qm create 101 \
+    --name ubuntu-web01 \
+    --memory 4096 \
+    --cores 2 \
+    --cpu host \
+    --net0 virtio,bridge=vmbr0 \
+    --scsihw virtio-scsi-single \
+    --scsi0 local-lvm:32 \
+    --ide2 local:iso/ubuntu-24.04-live-server-amd64.iso,media=cdrom \
+    --boot order='scsi0;ide2' \
+    --ostype l26 \
+    --agent enabled=1
+
+  qm start 101
+  qm status 101
+
+5. คำสั่งบริหารจัดการ VM
+------------------------------------------------------------
+  qm list                       แสดง VM ทั้งหมดบน node
+  qm start 101                  เปิด VM
+  qm shutdown 101               ปิดแบบสุภาพ (ผ่าน ACPI/agent)
+  qm stop 101                   ปิดทันที (เหมือนดึงปลั๊ก)
+  qm reboot 101                 รีบูต
+  qm suspend 101 / qm resume 101
+  qm config 101                 ดูค่า config
+  qm destroy 101 --purge        ลบ VM (ระวัง ย้อนกลับไม่ได้)
+  qm terminal 101               เข้า serial console (ต้องตั้ง serial)
+  qm unlock 101                 ปลดล็อกเมื่อ VM ค้างสถานะ lock
+
+6. ปรับแต่ง Resource
+------------------------------------------------------------
+  qm set 101 --memory 8192
+  qm set 101 --cores 4
+  qm set 101 --balloon 2048
+  qm set 101 --net1 virtio,bridge=vmbr1,tag=20     ! เพิ่ม NIC ใน VLAN 20
+  qm resize 101 scsi0 +20G                         ! ขยายดิสก์เพิ่ม 20GB
+  qm set 101 --onboot 1                            ! เปิดอัตโนมัติเมื่อ node boot
+
+หลัง resize ดิสก์ ต้องขยาย partition และ filesystem ภายใน guest เองด้วย:
+  sudo growpart /dev/sda 3
+  sudo resize2fs /dev/sda3        ! สำหรับ ext4 (กรณี LVM ใช้ pvresize, lvextend)
+
+7. ติดตั้ง QEMU Guest Agent (ใน Ubuntu guest)
+------------------------------------------------------------
+  sudo apt update
+  sudo apt install -y qemu-guest-agent
+  sudo systemctl enable --now qemu-guest-agent
+
+ประโยชน์: Proxmox อ่าน IP ของ VM ได้, shutdown สะอาด, snapshot สอดคล้อง
+
+8. Snapshot และ Backup
+------------------------------------------------------------
+Snapshot:
+  qm snapshot 101 before-upgrade --description "ก่อนอัปเกรดระบบ"
+  qm listsnapshot 101
+  qm rollback 101 before-upgrade
+  qm delsnapshot 101 before-upgrade
+
+Backup (vzdump):
+  vzdump 101 --mode snapshot --compress zstd --storage local
+  ls /var/lib/vz/dump
+
+Restore:
+  qmrestore /var/lib/vz/dump/vzdump-qemu-101-<timestamp>.vma.zst 102 --storage local-lvm
+
+หมายเหตุ: Snapshot ไม่ใช่ Backup เพราะอยู่บน storage เดียวกัน
+ควรทำ Backup ไปยัง storage แยก เช่น NAS หรือ Proxmox Backup Server
+
+9. Template และ Clone
+------------------------------------------------------------
+  qm shutdown 101
+  qm template 101                         ! แปลง VM เป็น template
+  qm clone 101 201 --name web02 --full    ! Full clone
+  qm clone 101 202 --name web03           ! Linked clone (เร็วกว่า ประหยัดที่)
+
+ตัวอย่าง Cloud-Init (ใช้กับ cloud image):
+  qm set 201 --ide2 local-lvm:cloudinit
+  qm set 201 --ciuser ubuntu --cipassword 'ChangeMe123'
+  qm set 201 --ipconfig0 ip=192.168.1.51/24,gw=192.168.1.1
+  qm set 201 --nameserver 8.8.8.8
+  qm set 201 --sshkeys ~/.ssh/id_rsa.pub
+
+10. เครือข่ายบน Proxmox
+------------------------------------------------------------
+ไฟล์ตั้งค่า: /etc/network/interfaces
+
+  auto vmbr0
+  iface vmbr0 inet static
+      address 192.168.1.5/24
+      gateway 192.168.1.1
+      bridge-ports eno1
+      bridge-stp off
+      bridge-fd 0
+      bridge-vlan-aware yes
+      bridge-vids 2-4094
+
+ใช้ค่าใหม่โดยไม่ต้อง reboot:
+  ifreload -a
+
+11. Troubleshooting
+------------------------------------------------------------
+  อาการ: VM start ไม่ได้ "TASK ERROR: timeout waiting on systemd"
+    - ตรวจพื้นที่ storage: pvesm status
+    - ตรวจ lock: qm unlock <vmid>
+
+  อาการ: VM ไม่มีเครือข่าย
+    - ตรวจ bridge และ VLAN tag ของ NIC
+    - ตรวจ firewall ของ VM (Datacenter/Node/VM > Firewall)
+    - ภายใน guest ตรวจ: ip a ; ip r ; resolvectl status
+
+  อาการ: ประสิทธิภาพ I/O ต่ำ
+    - ใช้ VirtIO SCSI และเปิด IO Thread
+    - ตรวจ cache mode ของ disk และสถานะ storage
+
+ตรวจสอบ log:
+  journalctl -u pvedaemon -n 50
+  tail -f /var/log/syslog

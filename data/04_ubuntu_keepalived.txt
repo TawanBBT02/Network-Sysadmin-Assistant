@@ -1,0 +1,166 @@
+============================================================
+คู่มือตั้งค่า High Availability (HA) ด้วย Keepalived บน Ubuntu Server
+============================================================
+
+1. แนวคิด
+------------------------------------------------------------
+Keepalived ใช้โปรโตคอล VRRP (Virtual Router Redundancy Protocol)
+เพื่อสร้าง Virtual IP (VIP) ที่ลอยอยู่ระหว่างเซิร์ฟเวอร์หลายเครื่อง
+เมื่อเครื่อง MASTER ล่ม เครื่อง BACKUP จะรับ VIP ต่อโดยอัตโนมัติ
+
+ตัวอย่าง Topology:
+
+              VIP: 192.168.1.100
+                    |
+        +-----------+-----------+
+        |                       |
+   [node1 MASTER]          [node2 BACKUP]
+   192.168.1.11            192.168.1.12
+   priority 150            priority 100
+
+ผู้ใช้เชื่อมต่อที่ 192.168.1.100 เสมอ ไม่ต้องสนใจว่าเครื่องไหนทำงานอยู่
+
+2. ข้อกำหนดเบื้องต้น
+------------------------------------------------------------
+  - Ubuntu Server 22.04 / 24.04 จำนวน 2 เครื่อง อยู่ใน subnet เดียวกัน
+  - สิทธิ์ sudo
+  - อนุญาต VRRP (IP protocol 112) และ multicast 224.0.0.18 ใน firewall
+  - เวลาตรงกัน (ใช้ chrony หรือ systemd-timesyncd)
+  - ทราบชื่อ interface ด้วยคำสั่ง:  ip -br addr
+
+3. ติดตั้ง Keepalived (ทำทั้ง 2 เครื่อง)
+------------------------------------------------------------
+  sudo apt update
+  sudo apt install -y keepalived
+  keepalived --version
+
+4. เปิดให้ bind IP ที่ไม่ได้อยู่บนเครื่อง (ทำทั้ง 2 เครื่อง)
+------------------------------------------------------------
+เพื่อให้บริการ (เช่น nginx) bind VIP ได้แม้เครื่องนั้นยังไม่ได้ถือ VIP
+
+  echo "net.ipv4.ip_nonlocal_bind = 1" | sudo tee /etc/sysctl.d/99-keepalived.conf
+  sudo sysctl --system
+
+5. สคริปต์ตรวจสอบบริการ (ตัวอย่าง: nginx)
+------------------------------------------------------------
+สร้างไฟล์ /etc/keepalived/check_nginx.sh
+
+  #!/bin/bash
+  # คืนค่า 0 = ปกติ, ไม่ใช่ 0 = ผิดปกติ
+  if ! systemctl is-active --quiet nginx; then
+      exit 1
+  fi
+  exit 0
+
+กำหนดสิทธิ์:
+  sudo chmod 755 /etc/keepalived/check_nginx.sh
+  sudo useradd -r -s /sbin/nologin keepalived_script
+
+6. ไฟล์ตั้งค่าบน node1 (MASTER)
+------------------------------------------------------------
+ไฟล์: /etc/keepalived/keepalived.conf
+
+  global_defs {
+      router_id NODE1
+      enable_script_security
+      script_user keepalived_script
+  }
+
+  vrrp_script chk_nginx {
+      script "/etc/keepalived/check_nginx.sh"
+      interval 2
+      weight -60
+      fall 2
+      rise 2
+  }
+
+  vrrp_instance VI_1 {
+      state MASTER
+      interface ens18
+      virtual_router_id 51
+      priority 150
+      advert_int 1
+      authentication {
+          auth_type PASS
+          auth_pass Kp4Secret
+      }
+      virtual_ipaddress {
+          192.168.1.100/24 dev ens18
+      }
+      track_script {
+          chk_nginx
+      }
+  }
+
+7. ไฟล์ตั้งค่าบน node2 (BACKUP)
+------------------------------------------------------------
+เหมือน node1 แต่เปลี่ยน 3 จุด:
+
+  router_id NODE2
+  state BACKUP
+  priority 100
+
+ส่วนที่ต้อง "เหมือนกัน" ทั้งสองเครื่อง:
+  - virtual_router_id (51)
+  - auth_pass
+  - virtual_ipaddress
+  - interface ต้องมีอยู่จริงในแต่ละเครื่อง (ชื่ออาจต่างกันได้)
+
+หมายเหตุ: auth_pass ใช้ได้สูงสุด 8 ตัวอักษร (Keepalived จะตัดส่วนเกิน)
+และ PASS ไม่ได้เข้ารหัสจริงจัง ควรแยก VRRP ไว้ใน VLAN เฉพาะ
+
+8. เริ่มบริการ
+------------------------------------------------------------
+  sudo systemctl enable --now keepalived
+  sudo systemctl status keepalived
+  sudo journalctl -u keepalived -f
+
+9. ทดสอบ Failover
+------------------------------------------------------------
+ตรวจสอบว่า VIP อยู่เครื่องไหน:
+  ip -br addr show ens18
+  ip addr show ens18 | grep 192.168.1.100
+
+ทดสอบจากเครื่อง client:
+  ping 192.168.1.100
+  curl http://192.168.1.100
+
+จำลองเครื่อง MASTER ล่ม:
+  # บน node1
+  sudo systemctl stop keepalived
+  # หรือ
+  sudo systemctl stop nginx          # ให้ health check ลดค่า priority
+
+ผลที่คาดหวัง:
+  - VIP ย้ายไปอยู่ที่ node2 ภายในไม่กี่วินาที
+  - เมื่อเปิด node1 กลับมา VIP จะกลับไป node1 (preempt เป็นค่าเริ่มต้น)
+
+ปิดการ preempt (ไม่ให้ VIP ย้ายกลับอัตโนมัติ) ให้ตั้ง node ทั้งสองเป็น
+state BACKUP และเพิ่มบรรทัด:
+  nopreempt
+
+10. เปิด Firewall (UFW)
+------------------------------------------------------------
+  sudo ufw allow in on ens18 to 224.0.0.18 comment 'VRRP multicast'
+  sudo ufw allow proto vrrp from 192.168.1.0/24
+  # ถ้า ufw ไม่รู้จัก proto vrrp ให้เพิ่มกฎใน /etc/ufw/before.rules:
+  #   -A ufw-before-input -p vrrp -d 224.0.0.18 -j ACCEPT
+
+11. Troubleshooting
+------------------------------------------------------------
+  อาการ: ทั้งสองเครื่องถือ VIP พร้อมกัน (Split-brain)
+    - ตรวจ virtual_router_id และ auth_pass ว่าตรงกัน
+    - ตรวจว่า firewall/switch ไม่บล็อก VRRP
+    - ตรวจ VLAN และ multicast snooping บน switch
+
+  อาการ: VIP ไม่ขึ้นเลย
+    - sudo journalctl -u keepalived --no-pager | tail -50
+    - ตรวจชื่อ interface ใน config
+    - ตรวจไวยากรณ์: sudo keepalived -t -f /etc/keepalived/keepalived.conf
+
+  อาการ: ตรวจ VRRP packet
+    - sudo tcpdump -i ens18 -nn vrrp
+
+  อาการ: script ไม่ทำงาน
+    - ตรวจสิทธิ์ไฟล์ และ user ใน script_user
+    - ทดสอบรันเองด้วย: /etc/keepalived/check_nginx.sh; echo $?

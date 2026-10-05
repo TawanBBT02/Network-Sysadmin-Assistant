@@ -1,0 +1,168 @@
+============================================================
+คอนเซปต์และพารามิเตอร์ Site-to-Site IPsec VPN
+============================================================
+
+1. IPsec VPN คืออะไร
+------------------------------------------------------------
+IPsec (Internet Protocol Security) คือชุดโปรโตคอลสำหรับเข้ารหัสและ
+ตรวจสอบความถูกต้องของแพ็กเก็ต IP ใช้สร้างอุโมงค์ (Tunnel) ที่ปลอดภัย
+ระหว่างสองเครือข่ายผ่าน Internet เรียกว่า Site-to-Site VPN
+
+  [LAN A 192.168.1.0/24]--[Router A]==== IPsec Tunnel ====[Router B]--[LAN B 192.168.2.0/24]
+                          203.0.113.1      Internet       198.51.100.1
+
+บริการด้านความปลอดภัยที่ IPsec ให้:
+  Confidentiality : เข้ารหัสข้อมูล (Encryption)
+  Integrity       : ตรวจสอบว่าข้อมูลไม่ถูกแก้ไข (Hash/HMAC)
+  Authentication  : ยืนยันตัวตนของปลายทาง (Pre-shared key / Certificate)
+  Anti-replay     : ป้องกันการส่งแพ็กเก็ตเดิมซ้ำ
+
+2. องค์ประกอบหลัก
+------------------------------------------------------------
+  IKE (Internet Key Exchange) : โปรโตคอลเจรจาและแลกเปลี่ยนกุญแจ (UDP 500)
+  NAT-T                       : ห่อใน UDP 4500 เมื่อมี NAT คั่นกลาง
+  ESP (IP protocol 50)        : เข้ารหัส + ตรวจสอบความถูกต้อง (นิยมใช้)
+  AH  (IP protocol 51)        : ตรวจสอบความถูกต้องอย่างเดียว ไม่เข้ารหัส
+  SA (Security Association)   : ข้อตกลงด้านความปลอดภัยแบบทิศทางเดียว
+  Tunnel mode                 : ห่อ IP packet เดิมทั้งชุด (ใช้กับ Site-to-Site)
+  Transport mode              : ห่อเฉพาะ payload (ใช้ Host-to-Host)
+
+3. ขั้นตอนของ IPsec (IKEv1)
+------------------------------------------------------------
+Phase 1 (IKE SA / ISAKMP): สร้างช่องทางควบคุมที่ปลอดภัย
+  - Main Mode (6 messages) หรือ Aggressive Mode (3 messages)
+  - ตกลง: Encryption, Hash, Authentication, DH Group, Lifetime
+
+Phase 2 (IPsec SA / Quick Mode): สร้างอุโมงค์สำหรับข้อมูลจริง
+  - ตกลง: Transform set (ESP encryption + hash), Interesting traffic,
+    PFS (ถ้าใช้), Lifetime
+
+IKEv2 ลดขั้นตอนเหลือ 4 messages แลกเปลี่ยนเร็วขึ้น รองรับ MOBIKE,
+EAP และมีความปลอดภัย/เสถียรกว่า ควรเลือกใช้ IKEv2 เมื่ออุปกรณ์รองรับ
+
+4. พารามิเตอร์ที่ต้อง "ตรงกันทั้งสองฝั่ง"
+------------------------------------------------------------
+Phase 1 (IKE):
+  - IKE version              : IKEv1 หรือ IKEv2
+  - Encryption               : AES-256 (แนะนำ) / AES-128
+  - Integrity/Hash           : SHA-256 หรือสูงกว่า (หลีกเลี่ยง MD5, SHA-1)
+  - DH Group                 : 14 (2048-bit) ขึ้นไป หรือ 19/20 (ECP)
+  - Authentication           : Pre-shared key (PSK) หรือ Certificate
+  - Lifetime                 : เช่น 86400 วินาที
+  - Peer IP / Identity       : Public IP หรือ FQDN ของปลายทาง
+
+Phase 2 (IPsec):
+  - Protocol                 : ESP
+  - Encryption               : AES-256 (หรือ AES-GCM)
+  - Integrity                : SHA-256
+  - PFS (Perfect Forward Secrecy) : เปิดพร้อม DH Group 14+
+  - Lifetime                 : เช่น 3600 วินาที
+  - Mode                     : Tunnel
+  - Proxy ID / Interesting Traffic : ต้องเป็นภาพสะท้อนกัน
+      ฝั่ง A: local 192.168.1.0/24  remote 192.168.2.0/24
+      ฝั่ง B: local 192.168.2.0/24  remote 192.168.1.0/24
+
+5. ตัวอย่างการตั้งค่า Cisco IOS (IKEv1, Crypto Map)
+------------------------------------------------------------
+Router A (Public IP 203.0.113.1, Peer 198.51.100.1):
+
+  ! Phase 1
+  crypto isakmp policy 10
+   encryption aes 256
+   hash sha256
+   authentication pre-share
+   group 14
+   lifetime 86400
+  crypto isakmp key MyVpnSecret123 address 198.51.100.1
+
+  ! Phase 2
+  crypto ipsec transform-set TS-AES256 esp-aes 256 esp-sha256-hmac
+   mode tunnel
+
+  ! Interesting traffic
+  ip access-list extended VPN-TRAFFIC
+   permit ip 192.168.1.0 0.0.0.255 192.168.2.0 0.0.0.255
+
+  crypto map CMAP 10 ipsec-isakmp
+   set peer 198.51.100.1
+   set transform-set TS-AES256
+   set pfs group14
+   match address VPN-TRAFFIC
+
+  interface gigabitEthernet 0/1
+   description WAN
+   ip address 203.0.113.1 255.255.255.252
+   crypto map CMAP
+
+  ! ยกเว้น NAT สำหรับทราฟฟิก VPN (ถ้ามี NAT overload)
+  ip access-list extended NAT-ACL
+   deny   ip 192.168.1.0 0.0.0.255 192.168.2.0 0.0.0.255
+   permit ip 192.168.1.0 0.0.0.255 any
+  ip nat inside source list NAT-ACL interface gigabitEthernet 0/1 overload
+
+Router B ตั้งค่าแบบกระจก: สลับ peer IP, และสลับ source/destination ใน ACL
+(permit ip 192.168.2.0 0.0.0.255 192.168.1.0 0.0.0.255)
+
+6. คำสั่งตรวจสอบ
+------------------------------------------------------------
+  show crypto isakmp sa            สถานะ Phase 1 (ควรเป็น QM_IDLE)
+  show crypto ikev2 sa             สำหรับ IKEv2
+  show crypto ipsec sa             Phase 2, ตัวนับ encaps/decaps
+  show crypto map
+  show access-lists VPN-TRAFFIC
+  debug crypto isakmp              (ระวัง ใช้เมื่อจำเป็นและปิดด้วย undebug all)
+  debug crypto ipsec
+
+ทดสอบ: ping จาก LAN A ไป LAN B
+  Router A# ping 192.168.2.1 source 192.168.1.1
+
+7. Linux: strongSwan (แนวคิดแบบย่อ)
+------------------------------------------------------------
+  sudo apt install -y strongswan
+
+ไฟล์ /etc/ipsec.conf:
+  conn site-to-site
+      keyexchange=ikev2
+      left=203.0.113.1
+      leftsubnet=192.168.1.0/24
+      right=198.51.100.1
+      rightsubnet=192.168.2.0/24
+      ike=aes256-sha256-modp2048!
+      esp=aes256-sha256-modp2048!
+      authby=secret
+      auto=start
+
+ไฟล์ /etc/ipsec.secrets:
+  203.0.113.1 198.51.100.1 : PSK "MyVpnSecret123"
+
+  sudo ipsec restart
+  sudo ipsec statusall
+
+8. ปัญหาที่พบบ่อย
+------------------------------------------------------------
+  Phase 1 ไม่ขึ้น (MM_NO_STATE):
+    - Policy ไม่ตรงกัน (encryption/hash/DH/auth)
+    - PSK ไม่ตรง หรือ peer IP ผิด
+    - Firewall/ISP บล็อก UDP 500/4500 หรือ ESP (protocol 50)
+
+  Phase 1 ขึ้นแต่ Phase 2 ไม่ขึ้น:
+    - ACL / Proxy ID ไม่เป็นภาพสะท้อนกัน
+    - Transform set หรือ PFS ไม่ตรงกัน
+
+  Tunnel ขึ้นแต่ ping ไม่ผ่าน:
+    - ไม่ได้ยกเว้น NAT (NAT exemption)
+    - Route กลับไม่ถูกต้อง
+    - MTU/MSS ปัญหา ลองลดด้วย  ip tcp adjust-mss 1360
+
+  Tunnel หลุดเป็นช่วง ๆ:
+    - Lifetime ไม่ตรง ตรวจ DPD (Dead Peer Detection)
+    - Public IP เปลี่ยน (Dynamic IP) พิจารณาใช้ FQDN หรือ Certificate
+
+9. Best Practice
+------------------------------------------------------------
+  - ใช้ IKEv2 + AES-256 + SHA-256 + DH Group 14 ขึ้นไป
+  - ใช้ PSK ที่ยาวและสุ่ม หรือใช้ Certificate
+  - จำกัด Interesting traffic ให้เฉพาะ subnet ที่จำเป็น
+  - เปิด DPD และ monitoring แจ้งเตือนเมื่อ tunnel down
+  - ทดสอบใน Lab (เช่น EVE-NG) ก่อนนำไปใช้งานจริง
+  - เก็บ PSK ไว้ในที่ปลอดภัย ไม่ใส่ในเอกสารที่เผยแพร่

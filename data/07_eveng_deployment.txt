@@ -1,0 +1,152 @@
+============================================================
+คู่มือ EVE-NG: การอิมพอร์ต Image และการเชื่อมต่อ Node
+============================================================
+
+1. ภาพรวม
+------------------------------------------------------------
+EVE-NG (Emulated Virtual Environment Next Generation) เป็นแพลตฟอร์มจำลอง
+เครือข่ายผ่านเว็บ รองรับอุปกรณ์หลายยี่ห้อ ใช้ทำ Lab ได้โดยไม่ต้องมีเครื่องจริง
+
+ประเภท Image หลัก:
+  QEMU     : /opt/unetlab/addons/qemu/      (vIOS, vIOS-L2, CSR1000v, Aruba CX, Linux)
+  IOL      : /opt/unetlab/addons/iol/bin/   (IOS on Linux)
+  Dynamips : /opt/unetlab/addons/dynamips/  (IOS รุ่นเก่า เช่น c7200)
+
+คำเตือน: Image ของผู้ผลิตมีลิขสิทธิ์ ต้องได้มาโดยชอบด้วยสัญญา/ไลเซนส์
+เช่น ดาวน์โหลดจากบัญชีของตนเองหรือองค์กร
+
+2. การเข้าถึง EVE-NG
+------------------------------------------------------------
+  Web UI : http://<EVE-IP>/   (user ค่าเริ่มต้น admin / eve)
+  SSH    : ssh root@<EVE-IP>  (รหัสผ่านตั้งตอนติดตั้ง)
+
+ตรวจสอบ IP ของ EVE-NG:
+  ip -br addr show pnet0
+
+3. กฎการตั้งชื่อโฟลเดอร์ Image (QEMU)
+------------------------------------------------------------
+รูปแบบ:  <prefix>-<ชื่อ/เวอร์ชัน>   ต้องใช้ prefix ตามชนิดอุปกรณ์
+
+  vios-         Cisco vIOS (Router)
+  viosl2-       Cisco vIOS L2 (Switch)
+  csr1000vng-   Cisco CSR1000v
+  linux-        Linux ทั่วไป
+  win-          Windows
+  aruba-        Aruba (เช่น aruba-cx ตามที่ EVE-NG กำหนดไว้ในเทมเพลต)
+  paloalto-, fortinet-, vyos-, pfsense- ฯลฯ
+
+ชื่อไฟล์ disk ภายในโฟลเดอร์ ต้องเป็นดังนี้:
+  virtioa.qcow2      ดิสก์หลักแบบ VirtIO
+  hda.qcow2          ดิสก์หลักแบบ IDE
+  hdb.qcow2 ...      ดิสก์ลำดับถัดไป
+  (บางอุปกรณ์ใช้ sataa.qcow2, scsia.qcow2 ตามเทมเพลต)
+
+4. ขั้นตอนอิมพอร์ต QEMU Image (ตัวอย่าง Cisco vIOS)
+------------------------------------------------------------
+4.1 สร้างโฟลเดอร์
+  mkdir -p /opt/unetlab/addons/qemu/vios-adventerprisek9-m-15.9.3M6
+
+4.2 อัปโหลดไฟล์ด้วย scp หรือ WinSCP จากเครื่อง PC
+  scp vios-adventerprisek9-m.vmdk.SPA.159-3.M6 \
+      root@<EVE-IP>:/opt/unetlab/addons/qemu/vios-adventerprisek9-m-15.9.3M6/
+
+4.3 แปลงรูปแบบดิสก์เป็น qcow2 และตั้งชื่อให้ถูกต้อง
+  cd /opt/unetlab/addons/qemu/vios-adventerprisek9-m-15.9.3M6
+  /opt/qemu/bin/qemu-img convert -f vmdk -O qcow2 \
+      vios-adventerprisek9-m.vmdk.SPA.159-3.M6 virtioa.qcow2
+  ls -lh
+
+  ถ้าไม่พบ /opt/qemu/bin/qemu-img ให้ใช้ qemu-img ที่ติดตั้งในระบบ
+
+4.4 แก้ไขสิทธิ์ (ขั้นตอนสำคัญ ห้ามข้าม)
+  /opt/unetlab/wrappers/unl_wrapper -a fixpermissions
+
+4.5 ลบไฟล์ต้นฉบับเพื่อประหยัดที่ (ถ้าจำเป็น)
+  rm vios-adventerprisek9-m.vmdk.SPA.159-3.M6
+
+ตัวอย่างอิมพอร์ตจากไฟล์ .qcow2 ที่ได้มาแล้ว:
+  mkdir -p /opt/unetlab/addons/qemu/linux-ubuntu-server-24.04
+  mv ubuntu-24.04-server.qcow2 /opt/unetlab/addons/qemu/linux-ubuntu-server-24.04/virtioa.qcow2
+  /opt/unetlab/wrappers/unl_wrapper -a fixpermissions
+
+5. อิมพอร์ต IOL (IOS on Linux)
+------------------------------------------------------------
+  scp i86bi-linux-l3-adventerprisek9-15.4.1T.bin root@<EVE-IP>:/opt/unetlab/addons/iol/bin/
+  cd /opt/unetlab/addons/iol/bin
+  chmod +x *.bin
+  /opt/unetlab/wrappers/unl_wrapper -a fixpermissions
+
+IOL ต้องมีไฟล์ license ชื่อ iourc ในโฟลเดอร์เดียวกัน
+(ได้มาตามเงื่อนไขของผู้ผลิต/บัญชีผู้ใช้ที่มีสิทธิ์)
+
+6. ตรวจสอบว่า EVE-NG มองเห็น Image
+------------------------------------------------------------
+  ls /opt/unetlab/addons/qemu/
+  ls /opt/unetlab/addons/iol/bin/
+
+ใน Web UI: Add node (คลิกขวาที่พื้นที่ว่างใน Lab) ต้องเห็นชื่อ Image
+ที่อิมพอร์ต ถ้าไม่เห็นให้ตรวจชื่อโฟลเดอร์ (prefix) และชื่อไฟล์ disk
+
+7. สร้าง Lab และเพิ่ม Node
+------------------------------------------------------------
+  1. Add new lab ตั้งชื่อ เช่น lab-ospf-01
+  2. คลิกขวาที่ canvas > Add an object > Node
+  3. เลือก Template (เช่น Cisco vIOS Router)
+  4. ตั้งค่า: Name, Number of nodes, RAM, Ethernets, Console (telnet)
+  5. กด Save แล้ว Node จะปรากฏบนผัง
+
+ค่าแนะนำ (ประมาณ):
+  vIOS Router : RAM 512 MB, 4 Ethernets
+  vIOS-L2     : RAM 768 MB, 8 Ethernets
+  Linux       : RAM 1024+ MB
+
+8. การเชื่อมต่อ Node
+------------------------------------------------------------
+เชื่อมระหว่าง Node:
+  - เอาเมาส์ไปที่ Node จะเห็นไอคอนปลั๊ก แล้วลากไปยังอีก Node
+  - เลือก interface ปลายทางจากรายการที่แสดงขึ้น
+
+เชื่อมกับเครือข่ายภายนอก (Cloud):
+  - Add object > Network
+  - เลือกชนิด:
+      Management(Cloud0)  = pnet0 เชื่อมกับ LAN จริงของ EVE-NG
+      Cloud1..Cloud9      = pnet1..pnet9 (ต้องมี NIC เพิ่มบน VM)
+      NAT                 = ออก Internet ผ่าน NAT ของ EVE-NG
+      Bridge              = Switch เสมือนภายใน Lab
+
+ตัวอย่างการให้ Router ออก Internet ผ่านโหนด NAT:
+  Router(config)# interface gigabitEthernet 0/0
+  Router(config-if)# ip address dhcp
+  Router(config-if)# no shutdown
+  Router# ping 8.8.8.8
+
+9. การเข้าถึง Console
+------------------------------------------------------------
+  - ดับเบิลคลิกที่ Node จะเปิด console ตามตัวแปร Native Console หรือ HTML5
+  - Node ที่ใช้ telnet จะมีพอร์ต 32769, 32770, ...
+    ตัวอย่าง: telnet <EVE-IP> 32769
+  - ตั้งค่า Telnet client บน Windows ให้ตรงกับพอร์ตผ่าน "EVE-NG Client Pack"
+
+10. บันทึกค่าของอุปกรณ์ใน Lab
+------------------------------------------------------------
+  Router# write memory
+  ! ใน EVE-NG ต้อง "Export CFG" เพื่อให้ config ถูกเก็บถาวรในไฟล์ Lab
+  ! คลิกขวา Node > Config Set  หรือใช้ปุ่ม Export CFG บนแถบเครื่องมือ
+  ! (ถ้าไม่ export ค่าจะหายเมื่อ wipe หรือ stop node ตามชนิด image)
+
+11. Troubleshooting
+------------------------------------------------------------
+  อาการ: Node สีแดง/เปิดไม่ขึ้น
+    - ตรวจสิทธิ์: /opt/unetlab/wrappers/unl_wrapper -a fixpermissions
+    - ตรวจ RAM/CPU ของ VM ที่รัน EVE-NG และเปิด nested virtualization
+    - ตรวจ log: tail -f /opt/unetlab/data/Logs/unl_wrapper.txt
+
+  อาการ: ไม่เห็น Image ในรายการ
+    - ตรวจ prefix ของชื่อโฟลเดอร์ให้ตรงกับ template
+
+  อาการ: Console ไม่เปิด
+    - ตรวจว่า Client Pack ติดตั้งแล้ว และ browser อนุญาต protocol telnet://
+
+  ตรวจว่ารองรับ virtualization:
+    egrep -c '(vmx|svm)' /proc/cpuinfo      ! ต้องมากกว่า 0
+    kvm-ok

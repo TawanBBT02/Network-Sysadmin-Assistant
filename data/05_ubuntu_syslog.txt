@@ -1,0 +1,175 @@
+============================================================
+คู่มือสร้าง Centralized Log Server ด้วย rsyslog บน Ubuntu
+============================================================
+
+1. ภาพรวม
+------------------------------------------------------------
+Centralized Log Server ใช้รวบรวม log จากอุปกรณ์เครือข่าย (Cisco, Aruba)
+และเซิร์ฟเวอร์ Linux มาเก็บไว้ที่เครื่องเดียว เพื่อการตรวจสอบ ค้นหา
+และเก็บหลักฐานย้อนหลังได้ง่าย
+
+  [Cisco SW] ----\
+  [Aruba SW] -----+--- UDP/TCP 514 ---> [Log Server 192.168.1.10]
+  [Ubuntu Web] --/                       /var/log/remote/<host>/<program>.log
+
+Ubuntu มี rsyslog ติดตั้งมาให้เป็นค่าเริ่มต้นอยู่แล้ว
+
+2. ตรวจสอบและติดตั้ง
+------------------------------------------------------------
+  systemctl status rsyslog
+  sudo apt update
+  sudo apt install -y rsyslog
+  rsyslogd -v
+
+3. ตั้งค่าฝั่ง Server
+------------------------------------------------------------
+3.1 เปิดรับ log ผ่านเครือข่าย
+แก้ไขไฟล์ /etc/rsyslog.conf  (เอา # ออกจากบรรทัดเหล่านี้)
+
+  # UDP syslog reception
+  module(load="imudp")
+  input(type="imudp" port="514")
+
+  # TCP syslog reception
+  module(load="imtcp")
+  input(type="imtcp" port="514")
+
+หรือสร้างไฟล์แยกเพื่อจัดการง่ายขึ้น: /etc/rsyslog.d/10-remote-input.conf
+
+3.2 สร้าง Template แยกโฟลเดอร์ตามชื่อเครื่อง
+สร้างไฟล์ /etc/rsyslog.d/20-remote-template.conf
+
+  template(name="RemoteLogPath" type="string"
+           string="/var/log/remote/%HOSTNAME%/%PROGRAMNAME%.log")
+
+  # เก็บ log ที่มาจากเครื่องอื่นเท่านั้น (ไม่ใช่ localhost)
+  if ($fromhost-ip != '127.0.0.1') then {
+      action(type="omfile" dynaFile="RemoteLogPath")
+      stop
+  }
+
+ถ้าอุปกรณ์เครือข่ายไม่ส่ง hostname ที่เหมาะสม ให้ใช้ IP แทน:
+  string="/var/log/remote/%FROMHOST-IP%/%PROGRAMNAME%.log"
+
+3.3 เตรียมโฟลเดอร์และสิทธิ์
+  sudo mkdir -p /var/log/remote
+  sudo chown syslog:adm /var/log/remote
+  sudo chmod 750 /var/log/remote
+
+3.4 ตรวจ syntax และ restart
+  sudo rsyslogd -N1
+  sudo systemctl restart rsyslog
+  sudo systemctl enable rsyslog
+
+3.5 ตรวจว่าพอร์ตเปิดแล้ว
+  sudo ss -tulnp | grep 514
+
+ควรเห็น rsyslogd listen ทั้ง UDP และ TCP พอร์ต 514
+
+4. เปิด Firewall
+------------------------------------------------------------
+เปิดเฉพาะ subnet ที่เชื่อถือได้ (ไม่เปิดให้ทั้งโลก)
+
+  sudo ufw allow from 192.168.1.0/24 to any port 514 proto udp
+  sudo ufw allow from 192.168.1.0/24 to any port 514 proto tcp
+  sudo ufw status numbered
+
+5. ตั้งค่าฝั่ง Client (Ubuntu / Linux)
+------------------------------------------------------------
+สร้างไฟล์ /etc/rsyslog.d/90-forward.conf
+
+  # @ = UDP, @@ = TCP
+  *.* @@192.168.1.10:514
+
+ถ้าต้องการส่งเฉพาะบาง facility:
+  auth,authpriv.*   @@192.168.1.10:514
+  *.warning         @@192.168.1.10:514
+
+ตัวเลือกส่งแบบมี queue เพื่อไม่ให้ log หายเมื่อ server ล่ม:
+
+  action(type="omfwd" target="192.168.1.10" port="514" protocol="tcp"
+         action.resumeRetryCount="-1"
+         queue.type="LinkedList" queue.filename="fwdq"
+         queue.maxDiskSpace="1g" queue.saveOnShutdown="on")
+
+รีสตาร์ท:
+  sudo systemctl restart rsyslog
+
+ทดสอบส่ง log:
+  logger -p local0.info "Test message from $(hostname)"
+
+6. ตั้งค่าอุปกรณ์เครือข่ายให้ส่ง Syslog
+------------------------------------------------------------
+Cisco IOS:
+  Switch(config)# logging host 192.168.1.10
+  Switch(config)# logging trap informational
+  Switch(config)# logging source-interface vlan 99
+  Switch(config)# logging facility local6
+  Switch(config)# service timestamps log datetime msec localtime show-timezone
+  Switch(config)# service sequence-numbers
+  Switch# show logging
+
+Aruba (ArubaOS-Switch):
+  Aruba(config)# logging 192.168.1.10
+  Aruba(config)# logging severity info
+  Aruba(config)# logging facility local6
+  Aruba# show logging -r
+
+Aruba (ArubaOS-CX):
+  switch(config)# logging 192.168.1.10 vrf default
+  switch(config)# logging severity info
+
+7. ตรวจสอบการทำงาน
+------------------------------------------------------------
+  sudo tail -f /var/log/remote/*/*.log
+  ls -R /var/log/remote
+  sudo tcpdump -i any -nn port 514 -A
+
+ค้นหา log:
+  sudo grep -ri "LINK-3-UPDOWN" /var/log/remote/
+  sudo grep -ri "authentication failure" /var/log/remote/
+  sudo find /var/log/remote -name "*.log" -mtime -1
+
+8. การหมุนเวียน log (logrotate)
+------------------------------------------------------------
+สร้างไฟล์ /etc/logrotate.d/remote-logs
+
+  /var/log/remote/*/*.log {
+      daily
+      rotate 30
+      compress
+      delaycompress
+      missingok
+      notifempty
+      create 0640 syslog adm
+      sharedscripts
+      postrotate
+          /usr/lib/rsyslog/rsyslog-rotate
+      endscript
+  }
+
+ทดสอบ:
+  sudo logrotate -d /etc/logrotate.d/remote-logs
+
+9. ข้อควรพิจารณาด้านความปลอดภัย
+------------------------------------------------------------
+  - UDP 514 ไม่มีการเข้ารหัสและไม่รับประกันว่า log จะถึง ใช้ TCP ถ้าทำได้
+  - ถ้าต้องเข้ารหัส ให้ใช้ TLS (rsyslog-gnutls, พอร์ต 6514)
+  - จำกัดแหล่งที่ส่งด้วย firewall
+  - ตรวจสอบพื้นที่ดิสก์ด้วย df -h เป็นประจำ
+  - ซิงค์เวลาด้วย NTP ทุกอุปกรณ์ เพื่อให้ timestamp เทียบกันได้
+
+10. Troubleshooting
+------------------------------------------------------------
+  อาการ: ไม่มี log เข้ามาเลย
+    - ตรวจ firewall ทั้ง server และเส้นทางระหว่างกลาง
+    - sudo ss -tulnp | grep 514
+    - sudo tcpdump -i any port 514
+
+  อาการ: ไฟล์ log ถูกสร้างเป็นชื่อแปลก ๆ
+    - ตรวจ template และ %HOSTNAME%
+    - เปลี่ยนไปใช้ %FROMHOST-IP%
+
+  อาการ: permission denied
+    - ตรวจสิทธิ์โฟลเดอร์: ls -ld /var/log/remote
+    - ตรวจ log ของ rsyslog: journalctl -u rsyslog -n 50

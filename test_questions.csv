@@ -1,0 +1,28 @@
+question,expected_answer,has_answer_in_context
+"คำสั่งเพื่อเปลี่ยนจาก User EXEC mode เป็น Privileged EXEC mode คืออะไร?","คำสั่ง enable",True
+"วิธีตั้งชื่อ VLAN 10 เป็น SALES บน Cisco ต้องพิมพ์คำสั่งอะไร?","คำสั่ง name SALES",True
+"การทำ Factory Reset ของสวิตช์ Aruba ด้วยปุ่มหน้าเครื่อง ต้องรอให้ไฟอะไรกะพริบก่อนปล่อยปุ่ม Clear?","ไฟ Test LED กะพริบ (ประมาณ 5 วินาที)",True
+"ผู้ดูแลระบบสามารถปิดฟังก์ชันปุ่ม Clear/Reset หน้าเครื่อง Aruba ได้ด้วยคำสั่งอะไร?","คำสั่ง no front-panel-security password-clear",True
+"ค่า Administrative Distance (AD) ของ OSPF คือเท่าไหร่?","ค่า AD คือ 110",True
+"ลำดับแรกในการเลือก Router ID ของ OSPF พิจารณาจากอะไร?","พิจารณาจากค่าที่กำหนดด้วยคำสั่ง router-id",True
+"Keepalived ใช้โปรโตคอลอะไรในการสร้าง Virtual IP?","ใช้โปรโตคอล VRRP",True
+"ค่า virtual_router_id ในไฟล์ keepalived.conf ของ node MASTER และ BACKUP ต้องตั้งค่าอย่างไร?","ต้องตั้งค่าให้เหมือนกัน",True
+"Ubuntu มีโปรแกรมอะไรติดตั้งมาให้เป็นค่าเริ่มต้นสำหรับทำ Centralized Log Server?","โปรแกรม rsyslog",True
+"อุปกรณ์เครือข่าย Cisco ใช้คำสั่งอะไรเพื่อส่ง Syslog ไปที่ IP 192.168.1.10?","คำสั่ง logging host 192.168.1.10",True
+"คำสั่ง CLI ใดที่ใช้สำหรับลบ VM บน Proxmox และไม่สามารถย้อนกลับได้?","คำสั่ง qm destroy <vmid> --purge",True
+"การตั้งค่าเครือข่าย VLAN tag 20 สำหรับ VM บน Proxmox ต้องเพิ่มพารามิเตอร์ใด?","พารามิเตอร์ tag=20 (เช่น qm set <vmid> --net1 virtio,bridge=vmbr1,tag=20)",True
+"คำสั่งใดที่ต้องรันทุกครั้งหลังจากการนำเข้า Image ใน EVE-NG เพื่อแก้ไขสิทธิ์?","คำสั่ง /opt/unetlab/wrappers/unl_wrapper -a fixpermissions",True
+"รหัสผ่านเริ่มต้นสำหรับการเข้าถึง Web UI ของ EVE-NG ด้วยผู้ใช้ admin คืออะไร?","รหัสผ่านคือ eve",True
+"นโยบายการออกแบบเครือข่ายอนุญาตให้มีกี่ Zone ที่เชื่อมต่อตรงกับ Static Zone?","อนุญาตให้มีเพียง 1 Zone เท่านั้น (Gateway Zone)",True
+"ตามนโยบาย หาก Zone C ต้องการสื่อสารกับ Static Zone ต้องทำอย่างไร?","ต้องสื่อสารผ่านทาง Gateway Zone เท่านั้น",True
+"โปรโตคอล IKE แลกเปลี่ยนข้อมูลผ่านพอร์ต UDP ใดเป็นมาตรฐาน?","พอร์ต UDP 500",True
+"หาก IPsec Tunnel ขึ้นแต่ ping ไม่ผ่าน หนึ่งในสาเหตุที่พบบ่อยคืออะไร?","อาจเกิดจากไม่ได้ยกเว้น NAT (NAT exemption) หรือ Route กลับไม่ถูกต้อง",True
+"สถานะ Incomplete ในตาราง ARP หมายถึงอะไร?","หมายถึงส่ง ARP request ไปแล้วแต่ไม่มีการตอบกลับ",True
+"คำสั่งใดบน Windows ที่ใช้ไม่แปลง IP เป็นชื่อโดเมนเมื่อทำ Traceroute เพื่อให้ทำงานเร็วขึ้น?","คำสั่ง tracert -d",True
+"การตั้งค่า BGP Routing Protocol บน Cisco Switch มีขั้นตอนอย่างไร?","ไม่พบข้อมูล",False
+"คำสั่งรีเซ็ตรหัสผ่านผู้ดูแลระบบบน Windows Server 2022 คืออะไร?","ไม่พบข้อมูล",False
+"วิธีการสร้าง Docker Container บน Ubuntu มีขั้นตอนอย่างไร?","ไม่พบข้อมูล",False
+"อุปกรณ์ Palo Alto Firewall ใช้คำสั่งใดในการทำ Factory Reset?","ไม่พบข้อมูล",False
+"การติดตั้ง NGINX Ingress Controller บน Kubernetes ต้องรันคำสั่งใด?","ไม่พบข้อมูล",False
+"สาย Fiber Optic แบบ Single Mode สามารถส่งข้อมูลได้ไกลสูงสุดกี่กิโลเมตร?","ไม่พบข้อมูล",False
+"วิธีการเปลี่ยนรหัสผ่าน Wi-Fi บนเราเตอร์ของผู้ให้บริการอินเทอร์เน็ตทำอย่างไร?","ไม่พบข้อมูล",False

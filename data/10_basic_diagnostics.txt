@@ -1,0 +1,175 @@
+============================================================
+คู่มือแก้ปัญหาเครือข่ายเบื้องต้น: Ping, Traceroute และ ARP Table
+============================================================
+
+1. แนวทางการแก้ปัญหาแบบเป็นระบบ
+------------------------------------------------------------
+ใช้แนวคิดแบบ Bottom-up ตาม OSI Model:
+
+  Layer 1 : สาย, พอร์ต, ไฟ link
+  Layer 2 : MAC address, VLAN, ARP, Switch
+  Layer 3 : IP address, Subnet, Gateway, Routing
+  Layer 4+: Port, Firewall, Application
+
+ลำดับการทดสอบที่แนะนำ:
+  1. ping 127.0.0.1                 ทดสอบ TCP/IP stack ของตัวเอง
+  2. ping IP ของเครื่องตัวเอง        ทดสอบ NIC
+  3. ping Default Gateway           ทดสอบ LAN
+  4. ping IP ปลายทางนอก subnet       ทดสอบ routing (เช่น 8.8.8.8)
+  5. ping ชื่อโดเมน                  ทดสอบ DNS (เช่น google.com)
+  6. traceroute                      หาจุดที่เส้นทางมีปัญหา
+
+2. Ping (ICMP Echo)
+------------------------------------------------------------
+Windows:
+  ping 192.168.1.1
+  ping -n 10 192.168.1.1            ส่ง 10 ครั้ง
+  ping -t 192.168.1.1               ส่งต่อเนื่อง (Ctrl+C เพื่อหยุด)
+  ping -l 1472 -f 192.168.1.1       ทดสอบ MTU (-f = ห้าม fragment)
+
+Linux / macOS:
+  ping -c 4 192.168.1.1             ส่ง 4 ครั้ง
+  ping -i 0.2 192.168.1.1           ส่งถี่ขึ้น
+  ping -s 1472 -M do 192.168.1.1    ทดสอบ MTU (Linux, ห้าม fragment)
+  ping -I eth0 192.168.1.1          ระบุ interface ต้นทาง
+
+Cisco IOS:
+  Router# ping 192.168.1.1
+  Router# ping 192.168.1.1 source 10.0.0.1
+  Router# ping 192.168.1.1 repeat 100 size 1500 df-bit
+  Router# ping                      ! โหมด Extended (ถามค่าเพิ่มเติมทีละข้อ)
+
+อ่านผลลัพธ์ Cisco:
+  !   = ได้รับ reply
+  .   = Timeout
+  U   = Destination unreachable
+  N   = Network unreachable
+  M   = Could not fragment
+  ?   = Unknown packet type
+
+ความหมายของผลลัพธ์ Ping:
+  Reply from ...                 : ปกติ
+  Request timed out              : ไม่มีคำตอบ (ถูกบล็อก, เครื่องปิด, route ผิด)
+  Destination host unreachable   : Router/เครื่องตัวเองไม่พบเส้นทางหรือ ARP ไม่ได้
+  TTL expired in transit         : เกิด routing loop หรือ TTL ต่ำเกินไป
+
+ข้อควรระวัง: Ping ไม่ตอบ ไม่ได้แปลว่าเครื่องล่มเสมอไป เพราะ Firewall
+อาจบล็อก ICMP ไว้ ควรทดสอบพอร์ตบริการจริงด้วย เช่น:
+  Test-NetConnection 192.168.1.10 -Port 443       (PowerShell)
+  nc -vz 192.168.1.10 443                         (Linux)
+
+3. Traceroute
+------------------------------------------------------------
+Traceroute แสดงรายการ Hop (Router) ระหว่างต้นทางและปลายทาง โดยเพิ่มค่า TTL
+ทีละ 1 แล้วรอ ICMP "Time Exceeded" จากแต่ละ hop
+
+Windows:
+  tracert 8.8.8.8
+  tracert -d 8.8.8.8                ไม่แปลง IP เป็นชื่อ (เร็วกว่า)
+  tracert -h 20 8.8.8.8             จำกัดสูงสุด 20 hop
+
+Linux / macOS:
+  traceroute 8.8.8.8
+  traceroute -n 8.8.8.8
+  traceroute -I 8.8.8.8             ใช้ ICMP แทน UDP
+  traceroute -T -p 443 8.8.8.8      ใช้ TCP พอร์ต 443 (ผ่าน firewall ได้ดีกว่า)
+  mtr -rw 8.8.8.8                   รวม ping + traceroute แบบต่อเนื่อง
+
+Cisco IOS:
+  Router# traceroute 8.8.8.8
+  Router# traceroute 8.8.8.8 source 10.0.0.1
+
+ตัวอย่างผลลัพธ์:
+  1   <1 ms   <1 ms   <1 ms   192.168.1.1
+  2    5 ms    4 ms    5 ms   10.0.0.1
+  3    *       *       *      Request timed out.
+  4   20 ms   21 ms   20 ms   8.8.8.8
+
+การวิเคราะห์:
+  - "* * *" ที่ hop กลางทาง ไม่ได้แปลว่าเสียเสมอไป บาง router ไม่ตอบ ICMP
+    ถ้า hop ถัดไปยังตอบปกติ แสดงว่าเส้นทางยังใช้ได้
+  - ถ้าหยุดที่ hop ใดแล้ว * * * ไปตลอด ให้ตรวจ router/firewall ที่ hop ก่อนหน้า
+  - ค่า latency เพิ่มสูงขึ้นอย่างฉับพลันที่ hop หนึ่ง บ่งชี้จุดคอขวดหรือลิงก์ไกล
+  - เห็น IP วนซ้ำไปมา หมายถึง Routing loop
+
+4. ARP Table
+------------------------------------------------------------
+ARP (Address Resolution Protocol) แปลง IP address เป็น MAC address ใน LAN
+ตารางนี้ช่วยตรวจว่าเครื่องคุยกันที่ Layer 2 ได้หรือไม่
+
+Windows:
+  arp -a                            แสดงตาราง ARP
+  arp -a 192.168.1.1                เฉพาะ IP นั้น
+  arp -d *                          ล้างตาราง (ต้องรันแบบ Administrator)
+
+Linux:
+  ip neigh show
+  ip neigh show dev eth0
+  sudo ip neigh flush all
+  arp -n                            (ถ้าติดตั้ง net-tools)
+  sudo arping -I eth0 192.168.1.1   ส่ง ARP request ตรวจสอบ IP/ตรวจ IP ซ้ำ
+
+Cisco IOS:
+  Router# show ip arp
+  Router# show ip arp 192.168.1.10
+  Router# clear arp-cache
+  Switch# show mac address-table
+  Switch# show mac address-table address aaaa.bbbb.cccc
+  Switch# show mac address-table interface gigabitEthernet 0/5
+
+สถานะที่ควรสังเกตใน ARP table:
+  - "Incomplete" / "FAILED" : ส่ง ARP ไปแล้วไม่มีการตอบกลับ
+    สาเหตุ: เครื่องปลายทางปิด, คนละ VLAN, สายหลุด, port ถูกปิด
+  - MAC เดียวกันแต่ IP หลายตัว : อาจเป็น Proxy ARP หรือมีเครื่อง
+    ทำ NAT/Bridge ซึ่งต้องตรวจสอบ
+  - IP เดียวกันแต่ MAC เปลี่ยนไปมา : IP Conflict หรือการ spoof ARP
+
+5. กรณีศึกษาการแก้ปัญหา
+------------------------------------------------------------
+กรณี A: เครื่องผู้ใช้ ping Gateway ไม่ได้
+  1. ตรวจ ipconfig /all (Windows) หรือ ip a (Linux)
+     ดูว่า IP, Subnet mask และ Gateway ถูกต้อง
+  2. ตรวจ arp -a ว่า Gateway มี MAC หรือไม่
+  3. ถ้าไม่มี: ตรวจสายและพอร์ตของ Switch
+       Switch# show interfaces status
+       Switch# show vlan brief
+  4. ตรวจว่าพอร์ตอยู่ VLAN ถูกต้อง
+  5. ตรวจ MAC ที่เรียนรู้: show mac address-table interface <port>
+
+กรณี B: ping Gateway ได้ แต่ออก Internet ไม่ได้
+  1. ping 8.8.8.8 (ถ้าได้ แสดงว่า routing ปกติ ปัญหาน่าจะเป็น DNS)
+  2. nslookup google.com  หรือ  dig google.com
+  3. ถ้า ping 8.8.8.8 ไม่ได้: tracert 8.8.8.8 ดูว่าหยุดที่ hop ไหน
+  4. ตรวจ default route และ NAT ที่ Router
+       Router# show ip route
+       Router# show ip nat translations
+
+กรณี C: เครือข่ายช้า/มี packet loss
+  1. ping -n 100 <ปลายทาง> ดูอัตรา loss และ latency
+  2. mtr -rw <ปลายทาง> หา hop ที่เริ่มมี loss
+  3. ตรวจ error บน interface
+       Switch# show interfaces gigabitEthernet 0/1 | include errors|CRC|drops
+  4. ตรวจ duplex/speed ไม่ตรงกัน และคุณภาพสาย
+
+กรณี D: IP ชนกัน (IP Conflict)
+  1. arping -D -I eth0 192.168.1.50
+  2. ดู ARP table ว่า IP ถูกตอบจากหลาย MAC หรือไม่
+  3. ใช้ show mac address-table ตามหาพอร์ตของ MAC ที่ไม่ถูกต้อง
+
+6. คำสั่งที่เกี่ยวข้องเพิ่มเติม
+------------------------------------------------------------
+  ipconfig /all ; ipconfig /release ; ipconfig /renew ; ipconfig /flushdns
+  ip a ; ip r ; ip route get 8.8.8.8
+  ss -tulnp                         ดูพอร์ตที่เปิดฟังอยู่
+  nslookup / dig                    ตรวจ DNS
+  curl -v https://example.com       ตรวจ HTTP/TLS
+  tcpdump -i eth0 -nn icmp          จับแพ็กเก็ต ICMP
+  tcpdump -i eth0 -nn arp           จับแพ็กเก็ต ARP
+
+7. เช็กลิสต์สั้น ๆ ก่อนแจ้งทีมอื่น
+------------------------------------------------------------
+  [ ] ปัญหาเกิดกับผู้ใช้คนเดียวหรือหลายคน
+  [ ] เริ่มเกิดเมื่อไร และมีการเปลี่ยนแปลงอะไรก่อนหน้านั้นหรือไม่
+  [ ] เก็บผล ping / traceroute / arp ไว้เป็นหลักฐาน
+  [ ] ตรวจ log ที่ Syslog Server ในช่วงเวลาดังกล่าว
+  [ ] ทดสอบจากอีกจุดหนึ่งเพื่อเปรียบเทียบ

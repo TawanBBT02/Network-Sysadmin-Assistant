@@ -1,0 +1,150 @@
+============================================================
+คู่มือการตั้งค่า OSPF Routing Protocol เบื้องต้น (Cisco IOS)
+============================================================
+
+1. OSPF คืออะไร
+------------------------------------------------------------
+OSPF (Open Shortest Path First) เป็น Link-State Routing Protocol แบบ
+Interior Gateway Protocol (IGP) ที่ใช้อัลกอริทึม Dijkstra (SPF)
+คำนวณเส้นทางที่ดีที่สุด
+
+คุณสมบัติสำคัญ:
+  - Administrative Distance = 110
+  - Metric = Cost (คำนวณจาก reference bandwidth / interface bandwidth)
+  - ใช้ multicast 224.0.0.5 (All OSPF Routers) และ 224.0.0.6 (DR/BDR)
+  - รองรับ VLSM และ CIDR, Converge เร็ว
+  - แบ่งเครือข่ายเป็น Area โดย Area 0 คือ Backbone
+
+2. ศัพท์ที่ควรรู้
+------------------------------------------------------------
+  Router ID (RID)   : ตัวระบุ router ใน OSPF (รูปแบบ IPv4)
+  Neighbor          : router ที่อยู่ link เดียวกันและมี Hello ตรงกัน
+  Adjacency         : neighbor ที่แลกเปลี่ยน LSDB กันแล้ว (state FULL)
+  DR / BDR          : Designated / Backup DR บน broadcast network
+  LSA               : Link-State Advertisement
+  LSDB              : Link-State Database
+  ABR               : Area Border Router (เชื่อมหลาย area)
+  ASBR              : router ที่นำ route จากภายนอก OSPF เข้ามา
+
+ลำดับการเลือก Router ID:
+  1. ค่าที่กำหนดด้วย "router-id"
+  2. IP สูงสุดของ Loopback interface
+  3. IP สูงสุดของ interface ที่ up
+
+3. ตัวอย่าง Topology
+------------------------------------------------------------
+        192.168.1.0/24            10.0.12.0/30         10.0.23.0/30        192.168.3.0/24
+  [PC-A]-----------[R1]=========================[R2]=======================[R3]-----------[PC-C]
+                  Lo0 1.1.1.1                 Lo0 2.2.2.2               Lo0 3.3.3.3
+
+ทั้งหมดอยู่ใน Area 0 (Single-area OSPF)
+
+4. การตั้งค่าบน R1
+------------------------------------------------------------
+  R1(config)# interface loopback 0
+  R1(config-if)# ip address 1.1.1.1 255.255.255.255
+  R1(config-if)# exit
+
+  R1(config)# interface gigabitEthernet 0/0
+  R1(config-if)# ip address 192.168.1.1 255.255.255.0
+  R1(config-if)# no shutdown
+  R1(config-if)# exit
+
+  R1(config)# interface gigabitEthernet 0/1
+  R1(config-if)# ip address 10.0.12.1 255.255.255.252
+  R1(config-if)# no shutdown
+  R1(config-if)# exit
+
+  R1(config)# router ospf 1
+  R1(config-router)# router-id 1.1.1.1
+  R1(config-router)# network 192.168.1.0 0.0.0.255 area 0
+  R1(config-router)# network 10.0.12.0 0.0.0.3 area 0
+  R1(config-router)# network 1.1.1.1 0.0.0.0 area 0
+  R1(config-router)# passive-interface gigabitEthernet 0/0
+  R1(config-router)# exit
+
+หมายเหตุ: ค่าหลัง network คือ Wildcard Mask (กลับค่าของ Subnet Mask)
+  /24 = 0.0.0.255   /30 = 0.0.0.3   /32 = 0.0.0.0
+
+5. การตั้งค่าบน R2 และ R3
+------------------------------------------------------------
+R2:
+  R2(config)# router ospf 1
+  R2(config-router)# router-id 2.2.2.2
+  R2(config-router)# network 10.0.12.0 0.0.0.3 area 0
+  R2(config-router)# network 10.0.23.0 0.0.0.3 area 0
+  R2(config-router)# network 2.2.2.2 0.0.0.0 area 0
+
+R3:
+  R3(config)# router ospf 1
+  R3(config-router)# router-id 3.3.3.3
+  R3(config-router)# network 10.0.23.0 0.0.0.3 area 0
+  R3(config-router)# network 192.168.3.0 0.0.0.255 area 0
+  R3(config-router)# network 3.3.3.3 0.0.0.0 area 0
+  R3(config-router)# passive-interface gigabitEthernet 0/0
+
+6. วิธีที่สอง: เปิด OSPF ที่ระดับ Interface
+------------------------------------------------------------
+  R1(config)# interface gigabitEthernet 0/1
+  R1(config-if)# ip ospf 1 area 0
+  R1(config-if)# exit
+  R1(config)# interface gigabitEthernet 0/0
+  R1(config-if)# ip ospf 1 area 0
+  R1(config)# router ospf 1
+  R1(config-router)# passive-interface gigabitEthernet 0/0
+
+วิธีนี้อ่านง่ายและลดปัญหาเรื่อง wildcard mask ผิด
+
+7. ปรับแต่งที่ใช้บ่อย
+------------------------------------------------------------
+7.1 Reference Bandwidth (ค่าปกติ 100 Mbps ทำให้ Gigabit และ FastEthernet cost = 1 เท่ากัน)
+  R1(config-router)# auto-cost reference-bandwidth 10000
+  ! ต้องตั้งค่าเท่ากันทุก router (หน่วย Mbps)
+
+7.2 กำหนด Cost เอง
+  R1(config-if)# ip ospf cost 10
+
+7.3 Priority สำหรับเลือก DR (0 = ไม่เป็น DR)
+  R1(config-if)# ip ospf priority 100
+
+7.4 Default Route Propagation
+  R1(config)# ip route 0.0.0.0 0.0.0.0 203.0.113.1
+  R1(config)# router ospf 1
+  R1(config-router)# default-information originate
+
+7.5 OSPF Authentication (MD5)
+  R1(config-if)# ip ospf message-digest-key 1 md5 OspfKey123
+  R1(config-if)# ip ospf authentication message-digest
+
+8. คำสั่งตรวจสอบ
+------------------------------------------------------------
+  show ip ospf neighbor            ดูสถานะ neighbor (ควรเป็น FULL)
+  show ip ospf interface brief     ดู interface ที่เปิด OSPF
+  show ip ospf database            ดู LSDB
+  show ip route ospf               ดู route ที่เรียนรู้ด้วย OSPF (รหัส O)
+  show ip protocols                สรุปค่า routing protocol
+  debug ip ospf adj                ดู debug adjacency (ใช้ระวังบน production)
+  undebug all
+
+9. แก้ปัญหา Neighbor ไม่ขึ้น FULL
+------------------------------------------------------------
+ตรวจสอบรายการต่อไปนี้ตามลำดับ:
+  1. Layer 1/2: interface up/up หรือไม่  (show ip interface brief)
+  2. Subnet และ Subnet mask อยู่ในเครือข่ายเดียวกันหรือไม่
+  3. Hello/Dead interval ตรงกันหรือไม่ (ค่าปกติ 10/40 วินาที)
+  4. Area ID ตรงกันหรือไม่
+  5. Authentication ตรงกันหรือไม่
+  6. MTU ตรงกันหรือไม่ (ไม่ตรงจะค้างที่ EXSTART/EXCHANGE)
+  7. Router ID ซ้ำกันหรือไม่
+  8. ACL หรือ Firewall บล็อก protocol 89 หรือไม่
+  9. ใช้ "passive-interface" บน interface ที่ต้องการสร้าง neighbor โดยไม่ตั้งใจหรือไม่
+
+สถานะ neighbor: DOWN > INIT > 2-WAY > EXSTART > EXCHANGE > LOADING > FULL
+
+10. Best Practice
+------------------------------------------------------------
+  - ตั้ง router-id ด้วยตนเองเสมอ
+  - ใช้ passive-interface default แล้วเปิดเฉพาะ interface ที่จำเป็น
+  - ตั้ง reference-bandwidth ให้เหมาะกับความเร็ว link ปัจจุบัน
+  - เปิด authentication ระหว่าง router
+  - เครือข่ายขนาดใหญ่ควรแบ่งหลาย area เพื่อลดขนาด LSDB
