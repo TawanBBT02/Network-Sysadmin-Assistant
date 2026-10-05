@@ -40,7 +40,7 @@ Cisco IOS แบ่งการทำงานเป็นหลายโหม�
   Switch(config-line)# login
   Switch(config-line)# logging synchronous
   Switch(config-line)# exit
-
+ 
   Switch(config)# ip domain-name lab.local
   Switch(config)# crypto key generate rsa modulus 2048
   Switch(config)# ip ssh version 2
